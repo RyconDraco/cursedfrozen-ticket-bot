@@ -1,5 +1,6 @@
 
 const http = require('http');
+
 const {
   Client,
   GatewayIntentBits,
@@ -16,24 +17,54 @@ const {
   Routes
 } = require('discord.js');
 
+// ==============================
+// CONFIG
+// ==============================
+
 const TOKEN = process.env.DISCORD_TOKEN;
 const GUILD_ID = '1549091749966647336';
 const OWNER_ID = '1549087398032445450';
 const TICKET_CATEGORY_ID = '1549100309412843694';
 
+const PORT = process.env.PORT || 10000;
+
+if (!TOKEN) {
+  console.error('❌ DISCORD_TOKEN is missing!');
+  process.exit(1);
+}
+
+// ==============================
+// DISCORD CLIENT
+// ==============================
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// Render web server
+// ==============================
+// RENDER WEB SERVER
+// ==============================
+
 const server = http.createServer((req, res) => {
-  res.writeHead(200);
+  res.writeHead(200, {
+    'Content-Type': 'text/plain'
+  });
+
   res.end('❄️ CursedFrozen Support is running!');
 });
 
-server.listen(process.env.PORT || 3000, '0.0.0.0');
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
+});
 
-// Ticket categories
+server.on('error', (error) => {
+  console.error('❌ Web server error:', error);
+});
+
+// ==============================
+// TICKET CATEGORIES
+// ==============================
+
 const categories = [
   { label: 'General Support', value: 'general', emoji: '🛠️' },
   { label: 'Player Report', value: 'report', emoji: '🚨' },
@@ -42,7 +73,10 @@ const categories = [
   { label: 'Ban Appeal', value: 'appeal', emoji: '🔨' }
 ];
 
-// Register slash command
+// ==============================
+// SLASH COMMAND REGISTER
+// ==============================
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`❄️ Online: ${readyClient.user.tag}`);
 
@@ -54,21 +88,32 @@ client.once(Events.ClientReady, async (readyClient) => {
 
   try {
     await rest.put(
-      Routes.applicationGuildCommands(readyClient.user.id, GUILD_ID),
-      { body: [command.toJSON()] }
+      Routes.applicationGuildCommands(
+        readyClient.user.id,
+        GUILD_ID
+      ),
+      {
+        body: [command.toJSON()]
+      }
     );
 
     console.log('✅ Ticket command registered!');
   } catch (error) {
-    console.error('Command registration error:', error);
+    console.error('❌ Command registration error:', error);
   }
 });
 
-// Handle interactions
+// ==============================
+// INTERACTION HANDLER
+// ==============================
+
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
 
-    // Owner-only panel command
+    // ==========================
+    // TICKET PANEL
+    // ==========================
+
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName !== 'ticketpanel') return;
 
@@ -118,15 +163,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    // Category selection
+    // ==========================
+    // CATEGORY SELECTION
+    // ==========================
+
     if (
       interaction.isStringSelectMenu() &&
       interaction.customId === 'ticket_category'
     ) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({
+        ephemeral: true
+      });
 
       const guild = interaction.guild;
       const user = interaction.user;
+
+      if (!guild) {
+        return interaction.editReply({
+          content: '❌ Server not found.'
+        });
+      }
 
       // Check ticket category
       const ticketCategory = await guild.channels.fetch(
@@ -142,7 +198,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // Check existing active ticket
+      // Check existing tickets
       const channels = await guild.channels.fetch();
 
       const existing = channels.find(channel =>
@@ -173,12 +229,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .replace(/[^a-z0-9]/g, '-')
         .slice(0, 20);
 
-      // Create private ticket inside selected category
+      // Create private ticket
       const channel = await guild.channels.create({
         name: `ticket-${safeName}`,
         type: ChannelType.GuildText,
         parent: TICKET_CATEGORY_ID,
-        topic: `CursedFrozen ticket | creatorId:${user.id} | type:${category.value}`,
+
+        topic:
+          `CursedFrozen ticket | creatorId:${user.id} | type:${category.value}`,
 
         permissionOverwrites: [
           {
@@ -218,6 +276,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ]
       });
 
+      // Ticket embed
       const ticketEmbed = new EmbedBuilder()
         .setColor('#79CFFF')
         .setTitle(`${category.emoji} CursedFrozen Support`)
@@ -231,6 +290,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           text: 'CursedFrozen • Private Support'
         });
 
+      // Close button
       const closeButton = new ButtonBuilder()
         .setCustomId('close_ticket')
         .setLabel('Close Ticket')
@@ -245,11 +305,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ]
       });
 
-      // Confirmation message - auto delete after 5 seconds
+      // Confirmation
       await interaction.editReply({
         content: `✅ Your ticket is ready: ${channel}`
       });
 
+      // Delete confirmation after 5 seconds
       setTimeout(async () => {
         try {
           await interaction.deleteReply();
@@ -261,7 +322,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    // Close ticket
+    // ==========================
+    // CLOSE TICKET
+    // ==========================
+
     if (
       interaction.isButton() &&
       interaction.customId === 'close_ticket'
@@ -287,15 +351,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       setTimeout(async () => {
         try {
-          await channel.delete('CursedFrozen ticket closed');
+          await channel.delete(
+            'CursedFrozen ticket closed'
+          );
         } catch (error) {
           console.error('Ticket delete error:', error);
         }
       }, 5000);
+
+      return;
     }
 
   } catch (error) {
-    console.error('Ticket error:', error);
+    console.error('❌ Ticket error:', error);
 
     if (
       interaction.isRepliable() &&
@@ -310,4 +378,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-client.login(TOKEN);
+// ==============================
+// DISCORD ERROR HANDLING
+// ==============================
+
+client.on(Events.Error, (error) => {
+  console.error('❌ Discord client error:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+  console.error('❌ Unhandled rejection:', error);
+});
+
+// ==============================
+// LOGIN
+// ==============================
+
+client.login(TOKEN).catch(error => {
+  console.error('❌ Discord login failed:', error);
+  process.exit(1);
+});
