@@ -57,6 +57,7 @@ client.once(Events.ClientReady, async (readyClient) => {
       Routes.applicationGuildCommands(readyClient.user.id, GUILD_ID),
       { body: [command.toJSON()] }
     );
+
     console.log('✅ Ticket command registered!');
   } catch (error) {
     console.error('Command registration error:', error);
@@ -113,6 +114,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           new ActionRowBuilder().addComponents(menu)
         ]
       });
+
       return;
     }
 
@@ -243,9 +245,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ]
       });
 
+      // Confirmation message - auto delete after 5 seconds
       await interaction.editReply({
         content: `✅ Your ticket is ready: ${channel}`
       });
+
+      setTimeout(async () => {
+        try {
+          await interaction.deleteReply();
+        } catch (error) {
+          console.error('Confirmation delete error:', error);
+        }
+      }, 5000);
+
       return;
     }
 
